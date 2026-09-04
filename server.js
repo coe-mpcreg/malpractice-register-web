@@ -162,8 +162,14 @@ const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
   console.log(`Malpractice Register server listening on port ${PORT}`);
+  const diag = sheets.diagnosticSummary();
+  console.log('Config check — spreadsheetId:', diag.spreadsheetId);
+  console.log('Config check — clientEmail:', diag.clientEmail);
+  console.log('Config check — privateKey looks valid:', diag.privateKeyLooksValid);
   if (sheets.isConfigured()) {
-    sheets.provisionSheetsIfNeeded().catch((e) => {
+    sheets.provisionSheetsIfNeeded().then(() => {
+      console.log('Google Sheet provisioning check completed successfully.');
+    }).catch((e) => {
       console.error('Could not verify/provision the Google Sheet at startup:', e.message);
     });
   } else {
