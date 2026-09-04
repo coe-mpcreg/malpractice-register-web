@@ -41,9 +41,30 @@ const SEM_TYPE_SHORT = { Odd: 'Odd', Even: 'Even', 'Suppl/Summer': 'Summ' };
 // ---------------------------------------------------------------------------
 // Configuration (from environment variables — set by the hosting platform)
 // ---------------------------------------------------------------------------
+function sanitizeSpreadsheetId(raw) {
+  let id = (raw || '').trim();
+  // Strip surrounding quotes, in case someone pasted a quoted value.
+  if (id.length >= 2) {
+    const first = id[0];
+    const last = id[id.length - 1];
+    if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
+      id = id.slice(1, -1).trim();
+    }
+  }
+  // If someone pasted the whole Sheets URL instead of just the ID, pull the
+  // ID out of it automatically: .../spreadsheets/d/<ID>/edit...
+  const match = id.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+  if (match) {
+    id = match[1];
+  }
+  // Strip any accidental whitespace/newlines that survived copy-paste.
+  id = id.replace(/\s+/g, '');
+  return id;
+}
+
 function getConfig() {
   return {
-    spreadsheetId: (process.env.GOOGLE_SPREADSHEET_ID || '').trim(),
+    spreadsheetId: sanitizeSpreadsheetId(process.env.GOOGLE_SPREADSHEET_ID || ''),
     clientEmail: (process.env.GOOGLE_CLIENT_EMAIL || '').trim(),
     privateKey: sanitizePrivateKey(process.env.GOOGLE_PRIVATE_KEY || ''),
   };
@@ -177,22 +198,36 @@ async function getAccessToken() {
 
 async function sheetsApiRequest(method, pathSuffix, bodyObj) {
   const cfg = getConfig();
+  if (!cfg.spreadsheetId) {
+    throw new Error('GOOGLE_SPREADSHEET_ID is empty on the server. Set it in your hosting environment variables and restart.');
+  }
   const token = await getAccessToken();
   const bodyStr = bodyObj !== undefined ? JSON.stringify(bodyObj) : undefined;
-  const resp = await httpsRequest(
-    {
-      hostname: 'sheets.googleapis.com',
-      path: `/v4/spreadsheets/${cfg.spreadsheetId}${pathSuffix}`,
-      method,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        ...(bodyStr ? { 'Content-Length': Buffer.byteLength(bodyStr) } : {}),
+  try {
+    const resp = await httpsRequest(
+      {
+        hostname: 'sheets.googleapis.com',
+        path: `/v4/spreadsheets/${cfg.spreadsheetId}${pathSuffix}`,
+        method,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          ...(bodyStr ? { 'Content-Length': Buffer.byteLength(bodyStr) } : {}),
+        },
       },
-    },
-    bodyStr
-  );
-  return resp ? JSON.parse(resp) : null;
+      bodyStr
+    );
+    return resp ? JSON.parse(resp) : null;
+  } catch (e) {
+    if (e.message.includes('HTTP 404')) {
+      throw new Error(
+        `HTTP 404 from Google Sheets for spreadsheet ID "${cfg.spreadsheetId}". This usually means either the ` +
+        `GOOGLE_SPREADSHEET_ID doesn't match an existing sheet, or the sheet hasn't been shared with ` +
+        `${cfg.clientEmail || '(no client email set)'} as an Editor. Double-check both, then restart the server.`
+      );
+    }
+    throw e;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -357,6 +392,15 @@ function caseNumber(data, serial) {
   return `${year}/${semShort}/${component}/${campus}/MPC${String(serial).padStart(3, '0')}`;
 }
 
+function diagnosticSummary() {
+  const cfg = getConfig();
+  return {
+    spreadsheetId: cfg.spreadsheetId || '(empty)',
+    clientEmail: cfg.clientEmail || '(empty)',
+    privateKeyLooksValid: cfg.privateKey.includes('BEGIN PRIVATE KEY') || cfg.privateKey.includes('BEGIN RSA PRIVATE KEY'),
+  };
+}
+
 module.exports = {
   isConfigured,
   provisionSheetsIfNeeded,
@@ -367,4 +411,5 @@ module.exports = {
   upsertUserPassword,
   uid,
   caseNumber,
+  diagnosticSummary,
 };
