@@ -264,8 +264,7 @@ async function provisionSheetsIfNeeded() {
     const userRows = DEFAULT_USERS.map((u) => USER_COLUMNS.map((c) => u[c]));
     await sheetsApiRequest(
       'POST',
-      `/values/${encodeURIComponent(USERS_SHEET)}!A2:${USERS_LAST_COL}?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
-      { values: userRows }
+      `/values/${encodeURIComponent(USERS_SHEET)}!A2:${USERS_LAST_COL}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
     );
   }
 }
@@ -309,7 +308,7 @@ async function appendReport(report) {
   const row = reportToRow(report);
   await sheetsApiRequest(
     'POST',
-    `/values/${encodeURIComponent(REPORTS_SHEET)}!A2:${REPORTS_LAST_COL}?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+    `/values/${encodeURIComponent(REPORTS_SHEET)}!A2:${REPORTS_LAST_COL}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
     { values: [row] }
   );
 }
@@ -371,7 +370,7 @@ async function upsertUserPassword(userId, password) {
   } else {
     await sheetsApiRequest(
       'POST',
-      `/values/${encodeURIComponent(USERS_SHEET)}!A2:${USERS_LAST_COL}?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+      `/values/${encodeURIComponent(USERS_SHEET)}!A2:${USERS_LAST_COL}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
       { values: [[userId, label, password]] }
     );
   }
