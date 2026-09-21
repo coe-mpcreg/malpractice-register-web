@@ -16,40 +16,41 @@ const STATUS_COLOR = {
   "Not Resolved": { bg: "#F1E0DE", text: "#7A2E2E", border: "#C08A87" },
 };
 
-const USER_OPTIONS = [
-  { id: "COE", label: "Controller of Examinations (COE)" },
-  { id: "NDepCOE", label: "North Dept. COE" },
-  { id: "SDepCOE", label: "South Dept. COE" },
-  { id: "NorthMPC", label: "North Campus MPC" },
-  { id: "SouthMPC", label: "South Campus MPC" },
+const USERS = [
+  { id: "COE", label: "Controller of Examinations (COE)", password: "coe@123" },
+  { id: "NDepCOE", label: "North Dept. COE", password: "ndep@123" },
+  { id: "SDepCOE", label: "South Dept. COE", password: "sdep@123" },
+  { id: "NorthMPC", label: "North Campus MPC", password: "north@123" },
+  { id: "SouthMPC", label: "South Campus MPC", password: "south@123" },
 ];
 
+const SEM_TYPE_SHORT = { "Odd": "Odd", "Even": "Even", "Suppl/Summer": "Summ" };
+
+function uid() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
+function caseNumber(data, serial) {
+  const semShort = SEM_TYPE_SHORT[data.semType] || data.semType || "NA";
+  const component = data.component || "NA";
+  const campus = data.campus || "NA";
+  const year = data.academicYear || "NA";
+  return `${year}/${semShort}/${component}/${campus}/MPC${String(serial).padStart(3, "0")}`;
+}
+
 function LoginScreen({ onLogin }) {
-  const [userId, setUserId] = useState(USER_OPTIONS[0].id);
+  const [userId, setUserId] = useState(USERS[0].id);
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
 
-  async function handleSubmit(e) {
+  function handleSubmit(e) {
     e.preventDefault();
-    setLoading(true);
-    setError("");
-    try {
-      const res = await fetch("/api/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, password }),
-      });
-      const result = await res.json();
-      setLoading(false);
-      if (!result.ok) {
-        setError(result.error || "Incorrect user or password.");
-        return;
-      }
-      onLogin(result.user, result.token);
-    } catch (err) {
-      setLoading(false);
-      setError("Could not reach the server. Check your internet connection.");
+    const user = USERS.find((u) => u.id === userId);
+    if (user && password === user.password) {
+      setError("");
+      onLogin(user);
+    } else {
+      setError("Incorrect password for the selected user.");
     }
   }
 
@@ -74,7 +75,7 @@ function LoginScreen({ onLogin }) {
             value={userId}
             onChange={(e) => { setUserId(e.target.value); setError(""); }}
           >
-            {USER_OPTIONS.map((u) => <option key={u.id} value={u.id}>{u.label}</option>)}
+            {USERS.map((u) => <option key={u.id} value={u.id}>{u.label}</option>)}
           </select>
         </div>
 
@@ -94,105 +95,15 @@ function LoginScreen({ onLogin }) {
 
         <button
           type="submit"
-          disabled={loading}
-          style={{ marginTop: 14, width: "100%", background: "#1F2B3E", color: "#EFEAE0", border: "none", padding: "11px 24px", borderRadius: 4, fontSize: 14, fontWeight: 600, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1 }}
+          style={{ marginTop: 14, width: "100%", background: "#1F2B3E", color: "#EFEAE0", border: "none", padding: "11px 24px", borderRadius: 4, fontSize: 14, fontWeight: 600, cursor: "pointer" }}
         >
-          {loading ? "Signing in…" : "Sign in"}
+          Sign in
         </button>
 
         <div style={{ marginTop: 18, fontSize: 11, color: "#8A8478", lineHeight: 1.5 }}>
-          All logged-in users currently have the same rights: view, create, and edit cases for either campus. Works from any computer or phone with a browser.
+          All logged-in users currently have the same rights: view, create, and edit cases for either campus.
         </div>
       </form>
-    </div>
-  );
-}
-
-function ManageUsers({ users, onChangePassword }) {
-  const [userId, setUserId] = useState(users[0].id);
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-
-  const [saving, setSaving] = useState(false);
-
-  async function handleSave() {
-    if (!newPassword || newPassword.length < 4) {
-      setError("Password must be at least 4 characters.");
-      setSuccess("");
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      setError("Passwords do not match.");
-      setSuccess("");
-      return;
-    }
-    setSaving(true);
-    const result = await onChangePassword(userId, newPassword);
-    setSaving(false);
-    if (!result || !result.ok) {
-      setError((result && result.error) || "Could not save the password to the spreadsheet. Check your connection.");
-      setSuccess("");
-      return;
-    }
-    setError("");
-    setNewPassword("");
-    setConfirmPassword("");
-    const user = users.find((u) => u.id === userId);
-    setSuccess(`Password updated for ${user ? user.label : userId}.`);
-    setTimeout(() => setSuccess(""), 3500);
-  }
-
-  return (
-    <div>
-      <h2 className="serif" style={{ fontSize: 19, margin: "0 0 6px", color: "#1F2B3E" }}>Manage users</h2>
-      <p style={{ fontSize: 13, color: "#5B6472", marginBottom: 20 }}>Only the COE account can change sign-in passwords. Changes take effect immediately for the next login.</p>
-
-      <div style={{ maxWidth: 380 }}>
-        <Field label="User">
-          <select style={inputStyle} value={userId} onChange={(e) => { setUserId(e.target.value); setError(""); setSuccess(""); }}>
-            {users.map((u) => <option key={u.id} value={u.id}>{u.label}</option>)}
-          </select>
-        </Field>
-        <Field label="New password">
-          <input type="password" style={inputStyle} value={newPassword} onChange={(e) => { setNewPassword(e.target.value); setError(""); }} placeholder="At least 4 characters" />
-        </Field>
-        <Field label="Confirm new password">
-          <input type="password" style={inputStyle} value={confirmPassword} onChange={(e) => { setConfirmPassword(e.target.value); setError(""); }} placeholder="Repeat password" />
-        </Field>
-
-        {error && <div style={{ color: "#7A2E2E", fontSize: 13, margin: "4px 0 14px" }}>{error}</div>}
-        {success && <div style={{ color: "#3B5A2A", fontSize: 13, margin: "4px 0 14px" }}>{success}</div>}
-
-        <button
-          onClick={handleSave}
-          style={{ background: "#1F2B3E", color: "#EFEAE0", border: "none", padding: "11px 24px", borderRadius: 4, fontSize: 14, fontWeight: 600, cursor: "pointer" }}
-        >
-          Update password
-        </button>
-      </div>
-
-      <div style={sectionHeadStyle}>Current accounts</div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {users.map((u) => (
-          <div key={u.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "8px 12px", background: "#F3EFE4", border: "1px solid #DCD3BD", borderRadius: 4 }}>
-            <span style={{ fontWeight: 600, color: "#1F2B3E" }}>{u.label}</span>
-            <span className="mono" style={{ color: "#8A8478" }}>{u.id}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function FullScreenMessage({ title, body }) {
-  return (
-    <div style={{ fontFamily: "Inter, -apple-system, sans-serif", background: "#1F2B3E", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: "#EFEAE0" }}>
-      <div style={{ textAlign: "center" }}>
-        <div className="serif" style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>{title}</div>
-        <div style={{ fontSize: 13, color: "#C9BFA5" }}>{body}</div>
-      </div>
     </div>
   );
 }
@@ -223,119 +134,22 @@ function MalpracticeRegister() {
     };
   }, [printTarget]);
 
-  const [appStatus, setAppStatus] = useState("checking"); // checking | serverDown | notConfigured | ready
-  const [token, setToken] = useState(null);
-  const [users, setUsers] = useState([]);
-  const [lastSynced, setLastSynced] = useState(null);
-  const [syncError, setSyncError] = useState("");
-
-  async function apiFetch(path, options) {
-    const opts = options || {};
-    const headers = { "Content-Type": "application/json", ...(opts.headers || {}) };
-    if (token) headers.Authorization = `Bearer ${token}`;
-    try {
-      const res = await fetch(path, { ...opts, headers });
-      let data;
-      try {
-        data = await res.json();
-      } catch (e) {
-        data = { ok: false, error: `Server returned an unexpected response (HTTP ${res.status}).` };
-      }
-      if (res.status === 401) {
-        handleLogout();
-      }
-      return data;
-    } catch (e) {
-      return { ok: false, error: "Could not reach the server. Check your internet connection." };
-    }
-  }
-
-  async function loadData(showErrors) {
-    const [reportsRes, usersRes] = await Promise.all([apiFetch("/api/reports"), apiFetch("/api/users")]);
-    if (reportsRes.ok && usersRes.ok) {
-      setReports(reportsRes.reports || []);
-      setUsers(usersRes.users || []);
-      setLastSynced(new Date());
-      setSyncError("");
-      setLoaded(true);
-      return reportsRes.reports || [];
-    } else {
-      if (showErrors) {
-        setSyncError((reportsRes && reportsRes.error) || (usersRes && usersRes.error) || "Could not load the register.");
-      }
-      return null;
-    }
-  }
+  const [dataPath, setDataPath] = useState("");
 
   useEffect(() => {
     (async () => {
-      let health;
-      try {
-        health = await fetch("/api/health").then((r) => r.json());
-      } catch (e) {
-        setAppStatus("serverDown");
-        return;
-      }
-      if (!health || !health.ok || !health.configured) {
-        setAppStatus("notConfigured");
-        return;
-      }
-      const storedToken = localStorage.getItem("mpr_token");
-      if (storedToken) {
-        try {
-          const meRes = await fetch("/api/me", { headers: { Authorization: `Bearer ${storedToken}` } }).then((r) => r.json());
-          if (meRes.ok) {
-            setToken(storedToken);
-            setCurrentUser(meRes.user);
-          } else {
-            localStorage.removeItem("mpr_token");
-          }
-        } catch (e) {
-          // Ignore — user will just need to sign in again.
-        }
-      }
-      setAppStatus("ready");
+      const data = await window.desktopStorage.load();
+      if (data && data.reports) setReports(data.reports);
+      const p = await window.desktopStorage.path();
+      setDataPath(p);
+      setLoaded(true);
     })();
   }, []);
 
-  // Once signed in, load the register, then keep it fresh. Polling is
-  // skipped while filling in the New Report or Enquiry forms, so a refresh
-  // never overwrites what's mid-typing.
   useEffect(() => {
-    if (!currentUser || !token) return;
-    loadData(true);
-  }, [currentUser, token]);
-
-  useEffect(() => {
-    if (!currentUser || !token) return;
-    if (tab === "new" || tab === "enquiry") return;
-    const t = setInterval(() => loadData(false), 25000);
-    return () => clearInterval(t);
-  }, [currentUser, token, tab]);
-
-  function handleLogin(user, tok) {
-    localStorage.setItem("mpr_token", tok);
-    setToken(tok);
-    setCurrentUser(user);
-  }
-
-  function handleLogout() {
-    localStorage.removeItem("mpr_token");
-    setToken(null);
-    setCurrentUser(null);
-    setReports([]);
-    setUsers([]);
-    setLoaded(false);
-  }
-
-  const effectiveUsers = users;
-
-  async function changePassword(userId, newPassword) {
-    return apiFetch(`/api/users/${encodeURIComponent(userId)}/password`, {
-      method: "POST",
-      body: JSON.stringify({ password: newPassword }),
-    });
-  }
+    if (!loaded) return;
+    window.desktopStorage.save({ reports });
+  }, [reports, loaded]);
 
   const filtered = useMemo(() => {
     return reports.filter((r) => {
@@ -383,30 +197,34 @@ function MalpracticeRegister() {
     return { total, byCampus, byStatus, byReporter, byProgramme, byMode, byComponent, byCampusStatus };
   }, [reports]);
 
-  async function addReport(data) {
-    setSaveNote("Saving…");
-    const result = await apiFetch("/api/reports", { method: "POST", body: JSON.stringify(data) });
-    if (!result.ok) {
-      setSaveNote("");
-      setSyncError(`Could not save the case: ${result.error || "unknown error"}. Nothing was cleared — check your connection and try again.`);
-      return false;
-    }
-    setReports((prev) => [result.report, ...prev]);
-    setSaveNote(`Case ${result.report.caseNo} saved. It now awaits enquiry.`);
+  function addReport(data) {
+    const serial = reports.filter((r) => r.campus === data.campus).length + 1;
+    const entry = {
+      id: uid(),
+      caseNo: caseNumber(data, serial),
+      dateReported: new Date().toISOString().slice(0, 10),
+      status: "Reported",
+      penaltyDX: false,
+      fineAmount: "",
+      cancelReg: false,
+      notResolvedReason: "",
+      enteredBy: currentUser ? currentUser.id : "",
+      enteredAt: new Date().toISOString(),
+      ...data,
+    };
+    setReports((prev) => [entry, ...prev]);
+    setSaveNote(`Case ${entry.caseNo} saved. It now awaits enquiry.`);
     setTimeout(() => setSaveNote(""), 3500);
     setTab("new");
-    return true;
   }
 
   function patchReport(id, patch) {
-    setReports((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
-    apiFetch(`/api/reports/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) }).then((result) => {
-      if (!result.ok) {
-        setSyncError(`A change didn't save: ${result.error || "unknown error"}. Try again, or use Refresh to check the latest state.`);
-      } else if (result.report) {
-        setReports((prev) => prev.map((r) => (r.id === id ? { ...r, ...result.report } : r)));
-      }
-    });
+    setReports((prev) => prev.map((r) => (r.id === id ? {
+      ...r,
+      ...patch,
+      lastEditedBy: currentUser ? currentUser.id : r.lastEditedBy,
+      lastEditedAt: new Date().toISOString(),
+    } : r)));
   }
 
   function exportToExcel(list) {
@@ -432,6 +250,7 @@ function MalpracticeRegister() {
       "DX Grade": r.penaltyDX ? "Yes" : "No",
       "Fine Amount": r.fineAmount || "",
       "Cancel Registration": r.cancelReg ? "Yes" : "No",
+      "Penalty Comments": r.penaltyComments || "",
       "Status": r.status,
       "Not Resolved Reason": r.notResolvedReason || "",
       "Description": r.description || "",
@@ -439,31 +258,14 @@ function MalpracticeRegister() {
       "Last Edited By": r.lastEditedBy || "",
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
-    ws["!cols"] = new Array(23).fill({ wch: 16 });
+    ws["!cols"] = new Array(24).fill({ wch: 16 });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Malpractice Register");
     XLSX.writeFile(wb, `malpractice_register_${new Date().toISOString().slice(0, 10)}.xlsx`);
   }
 
-  if (appStatus === "checking") {
-    return <FullScreenMessage title="Loading…" body="Connecting to the register." />;
-  }
-
-  if (appStatus === "serverDown") {
-    return <FullScreenMessage title="Can't reach the server" body="Check your internet connection and reload the page." />;
-  }
-
-  if (appStatus === "notConfigured") {
-    return (
-      <FullScreenMessage
-        title="Not set up yet"
-        body="The server administrator still needs to connect Google Sheets (server environment variables). Please check back soon."
-      />
-    );
-  }
-
   if (!currentUser) {
-    return <LoginScreen onLogin={handleLogin} />;
+    return <LoginScreen onLogin={setCurrentUser} />;
   }
 
   return (
@@ -502,7 +304,7 @@ function MalpracticeRegister() {
         <div style={{ maxWidth: 1080, margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
           <div>
             <div className="serif" style={{ fontSize: 24, fontWeight: 700, letterSpacing: "0.01em" }}>Office of the Controller of Examinations</div>
-            <div className="mono" style={{ fontSize: 12, color: "#C9BFA5", marginTop: 4, letterSpacing: "0.05em" }}>EXAMINATION MALPRACTICE REGISTER — WEB EDITION</div>
+            <div className="mono" style={{ fontSize: 12, color: "#C9BFA5", marginTop: 4, letterSpacing: "0.05em" }}>EXAMINATION MALPRACTICE REGISTER — DESKTOP EDITION</div>
           </div>
           <div style={{ textAlign: "right" }}>
             <div className="mono" style={{ fontSize: 12, color: "#A6813C" }}>
@@ -511,7 +313,7 @@ function MalpracticeRegister() {
             <div style={{ fontSize: 12, color: "#C9BFA5", marginTop: 6, display: "flex", alignItems: "center", gap: 10, justifyContent: "flex-end" }}>
               <span>Logged in as <strong style={{ color: "#EFEAE0" }}>{currentUser.label}</strong></span>
               <button
-                onClick={handleLogout}
+                onClick={() => setCurrentUser(null)}
                 style={{ background: "none", border: "1px solid #A6813C", color: "#EFEAE0", padding: "3px 10px", borderRadius: 3, fontSize: 11, cursor: "pointer" }}
               >
                 Log out
@@ -528,7 +330,6 @@ function MalpracticeRegister() {
             ["enquiry", "Enquiry"],
             ["register", "Case history"],
             ["dashboard", "Dashboard"],
-            ...(currentUser.id === "COE" ? [["users", "Manage users"]] : []),
           ].map(([key, label]) => (
             <button
               key={key}
@@ -571,26 +372,11 @@ function MalpracticeRegister() {
               onExport={exportToExcel}
             />
           )}
-          {tab === "users" && currentUser.id === "COE" && (
-            <ManageUsers users={effectiveUsers} onChangePassword={changePassword} />
-          )}
         </div>
       </div>
 
       <div style={{ maxWidth: 1080, margin: "0 auto", padding: "18px 32px 40px", fontSize: 11, color: "#8A8478" }} className="mono">
-        <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-          <span>
-            Live register, shared across both campuses
-            {lastSynced ? ` · Last synced ${lastSynced.toLocaleTimeString()}` : ""}
-          </span>
-          <button
-            onClick={() => loadData(true)}
-            style={{ background: "none", border: "1px solid #C9BFA5", color: "#5B6472", padding: "3px 10px", borderRadius: 3, fontSize: 11, cursor: "pointer" }}
-          >
-            Refresh now
-          </button>
-        </div>
-        {syncError && <div style={{ color: "#7A2E2E", marginTop: 6 }}>{syncError}</div>}
+        Saved locally at: {dataPath}
       </div>
       </div>
     </div>
@@ -641,6 +427,7 @@ function PrintableCase({ report: r }) {
             <Row label="DX Grade" value={r.penaltyDX ? "Yes" : "No"} />
             <Row label="Fine Amount" value={r.fineAmount ? `Rs. ${r.fineAmount}` : "—"} />
             <Row label="Cancel Registration" value={r.cancelReg ? "Yes" : "No"} />
+            <Row label="Comments" value={r.penaltyComments || "—"} />
           </tbody>
         </table>
       </div>
@@ -791,6 +578,9 @@ function CaseDetailPanel({ r }) {
             ].filter(Boolean).join(" · ") || null}
           />
         )}
+        {r.penaltyComments && (
+          <DetailRow label="Penalty Comments" value={r.penaltyComments} />
+        )}
         {r.status === "Not Resolved" && r.notResolvedReason && (
           <DetailRow label="Reason Not Resolved" value={r.notResolvedReason} />
         )}
@@ -868,9 +658,7 @@ function NewReport({ onSubmit }) {
 
   const classified = form.academicYear && form.programme && form.semType && form.component;
 
-  const [saving, setSaving] = useState(false);
-
-  async function handleSubmit() {
+  function handleSubmit() {
     if (!classified) {
       setError("Select academic year, programme, semester type, and component first.");
       return;
@@ -888,10 +676,8 @@ function NewReport({ onSubmit }) {
       return;
     }
     setError("");
-    setSaving(true);
-    const ok = await onSubmit(form);
-    setSaving(false);
-    if (ok) setForm(EMPTY_FORM);
+    onSubmit(form);
+    setForm(EMPTY_FORM);
   }
 
   return (
@@ -1012,7 +798,6 @@ function NewReport({ onSubmit }) {
       <div style={{ display: "flex", gap: 12 }}>
         <button
           onClick={handleSubmit}
-          disabled={saving}
           style={{
             background: "#1F2B3E",
             color: "#EFEAE0",
@@ -1021,11 +806,10 @@ function NewReport({ onSubmit }) {
             borderRadius: 4,
             fontSize: 14,
             fontWeight: 600,
-            cursor: saving ? "not-allowed" : "pointer",
-            opacity: saving ? 0.7 : 1,
+            cursor: "pointer",
           }}
         >
-          {saving ? "Saving…" : "Save report"}
+          Save report
         </button>
         <button
           onClick={() => { setForm(EMPTY_FORM); setError(""); }}
@@ -1114,6 +898,17 @@ function Enquiry({ reports, onPatch, onPrint }) {
                     <input type="checkbox" checked={!!r.cancelReg} onChange={(e) => onPatch(r.id, { cancelReg: e.target.checked })} />
                     Cancel the registration
                   </label>
+                </Field>
+              </div>
+
+              <div style={{ marginTop: 4 }}>
+                <Field label="Comments">
+                  <textarea
+                    style={{ ...inputStyle, minHeight: 70, resize: "vertical", fontFamily: "Inter, sans-serif" }}
+                    value={r.penaltyComments || ""}
+                    placeholder="Any additional remarks on the penalty or enquiry outcome"
+                    onChange={(e) => onPatch(r.id, { penaltyComments: e.target.value })}
+                  />
                 </Field>
               </div>
 
