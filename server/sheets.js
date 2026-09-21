@@ -248,19 +248,22 @@ async function provisionSheetsIfNeeded() {
     await sheetsApiRequest('POST', ':batchUpdate', { requests: addRequests });
   }
 
-  if (!existingTitles.includes(REPORTS_SHEET)) {
-    await sheetsApiRequest(
-      'PUT',
-      `/values/${encodeURIComponent(REPORTS_SHEET)}!A1:${REPORTS_LAST_COL}1?valueInputOption=RAW`,
-      { values: [REPORT_HEADER_LABELS] }
-    );
-  }
+  // Keep the header rows in sync with the current schema every time the
+  // server starts. This also repairs a Reports/Users tab that was created
+  // by an older version of this code before a column was added — it only
+  // ever touches row 1 (the labels), never the data rows underneath.
+  await sheetsApiRequest(
+    'PUT',
+    `/values/${encodeURIComponent(REPORTS_SHEET)}!A1:${REPORTS_LAST_COL}1?valueInputOption=RAW`,
+    { values: [REPORT_HEADER_LABELS] }
+  );
+  await sheetsApiRequest(
+    'PUT',
+    `/values/${encodeURIComponent(USERS_SHEET)}!A1:${USERS_LAST_COL}1?valueInputOption=RAW`,
+    { values: [USER_HEADER_LABELS] }
+  );
+
   if (!existingTitles.includes(USERS_SHEET)) {
-    await sheetsApiRequest(
-      'PUT',
-      `/values/${encodeURIComponent(USERS_SHEET)}!A1:${USERS_LAST_COL}1?valueInputOption=RAW`,
-      { values: [USER_HEADER_LABELS] }
-    );
     const userRows = DEFAULT_USERS.map((u) => USER_COLUMNS.map((c) => u[c]));
     await sheetsApiRequest(
       'POST',
