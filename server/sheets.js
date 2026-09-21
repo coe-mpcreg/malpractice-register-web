@@ -9,7 +9,7 @@ const REPORT_COLUMNS = [
   'programme', 'semType', 'component', 'studentName', 'usn', 'sem',
   'course', 'courseCode', 'examDate', 'examTime', 'roomNo',
   'copyMode', 'copyModeOther', 'reporterRole', 'reporterName', 'description',
-  'penaltyDX', 'fineAmount', 'cancelReg', 'notResolvedReason',
+  'penaltyDX', 'fineAmount', 'cancelReg', 'penaltyComments', 'notResolvedReason',
   'enteredBy', 'enteredAt', 'lastEditedBy', 'lastEditedAt',
 ];
 const REPORT_HEADER_LABELS = [
@@ -17,11 +17,11 @@ const REPORT_HEADER_LABELS = [
   'Programme', 'Semester Type', 'Component', 'Student Name', 'USN', 'Semester',
   'Course', 'Course Code', 'Date of Exam', 'Time', 'Room No',
   'Mode of Copying', 'Mode (Other)', 'Reporter Role', 'Reported By', 'Description',
-  'DX Grade', 'Fine Amount', 'Cancel Registration', 'Not Resolved Reason',
+  'DX Grade', 'Fine Amount', 'Cancel Registration', 'Penalty Comments', 'Not Resolved Reason',
   'Entered By', 'Entered At', 'Last Edited By', 'Last Edited At',
 ];
 const REPORTS_SHEET = 'Reports';
-const REPORTS_LAST_COL = 'AD';
+const REPORTS_LAST_COL = 'AE';
 
 const USER_COLUMNS = ['userId', 'label', 'password'];
 const USER_HEADER_LABELS = ['User ID', 'Label', 'Password'];
@@ -265,6 +265,7 @@ async function provisionSheetsIfNeeded() {
     await sheetsApiRequest(
       'POST',
       `/values/${encodeURIComponent(USERS_SHEET)}!A2:${USERS_LAST_COL}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+      { values: userRows }
     );
   }
 }
