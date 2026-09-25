@@ -11,6 +11,7 @@ const REPORT_COLUMNS = [
   'copyMode', 'copyModeOther', 'reporterRole', 'reporterName', 'description',
   'penaltyDX', 'fineAmount', 'cancelReg', 'penaltyComments', 'notResolvedReason',
   'enteredBy', 'enteredAt', 'lastEditedBy', 'lastEditedAt',
+  'orderRefNo', 'orderDate', 'enquiryMeetingDate', 'hodDept', 'orderPoints',
 ];
 const REPORT_HEADER_LABELS = [
   'ID', 'Case No', 'Date Reported', 'Status', 'Academic Year', 'Campus',
@@ -19,9 +20,10 @@ const REPORT_HEADER_LABELS = [
   'Mode of Copying', 'Mode (Other)', 'Reporter Role', 'Reported By', 'Description',
   'DX Grade', 'Fine Amount', 'Cancel Registration', 'Penalty Comments', 'Not Resolved Reason',
   'Entered By', 'Entered At', 'Last Edited By', 'Last Edited At',
+  'Order Ref No', 'Order Date', 'Enquiry Meeting Date', 'HoD Dept', 'Order Points',
 ];
 const REPORTS_SHEET = 'Reports';
-const REPORTS_LAST_COL = 'AE';
+const REPORTS_LAST_COL = 'AJ';
 
 const USER_COLUMNS = ['userId', 'label', 'password'];
 const USER_HEADER_LABELS = ['User ID', 'Label', 'Password'];
@@ -248,22 +250,19 @@ async function provisionSheetsIfNeeded() {
     await sheetsApiRequest('POST', ':batchUpdate', { requests: addRequests });
   }
 
-  // Keep the header rows in sync with the current schema every time the
-  // server starts. This also repairs a Reports/Users tab that was created
-  // by an older version of this code before a column was added — it only
-  // ever touches row 1 (the labels), never the data rows underneath.
+  // Always write the header row, so sheets created before new columns were
+  // added get the new column titles too. Data rows are not touched.
   await sheetsApiRequest(
     'PUT',
     `/values/${encodeURIComponent(REPORTS_SHEET)}!A1:${REPORTS_LAST_COL}1?valueInputOption=RAW`,
     { values: [REPORT_HEADER_LABELS] }
   );
-  await sheetsApiRequest(
-    'PUT',
-    `/values/${encodeURIComponent(USERS_SHEET)}!A1:${USERS_LAST_COL}1?valueInputOption=RAW`,
-    { values: [USER_HEADER_LABELS] }
-  );
-
   if (!existingTitles.includes(USERS_SHEET)) {
+    await sheetsApiRequest(
+      'PUT',
+      `/values/${encodeURIComponent(USERS_SHEET)}!A1:${USERS_LAST_COL}1?valueInputOption=RAW`,
+      { values: [USER_HEADER_LABELS] }
+    );
     const userRows = DEFAULT_USERS.map((u) => USER_COLUMNS.map((c) => u[c]));
     await sheetsApiRequest(
       'POST',
