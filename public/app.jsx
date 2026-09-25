@@ -351,9 +351,12 @@ function MalpracticeRegister() {
         }
         ::placeholder { color: #a39d8f; }
         .print-sheet { display: none; }
-        @page { size: A4; margin: 14mm 16mm; }
+        /* margin: 0 stops the browser printing its own date/time, title and URL
+           on the page; the report's margins come from the padding below instead. */
+        @page { size: A4; margin: 0; }
         @media print {
           html, body { background: #fff !important; margin: 0 !important; }
+          .print-sheet { padding: 14mm 16mm !important; box-sizing: border-box; }
           .no-print { display: none !important; }
           .system-info { display: none !important; }
           .print-sheet { display: block !important; }
