@@ -506,15 +506,10 @@ function PrintableCase({ report: r }) {
         </table>
       </div>
 
-      <div style={{ marginBottom: 40 }}>
-        <div style={{ fontWeight: 700, marginBottom: 6 }}>Enquiry committee remarks</div>
-        <div style={{ border: "1px solid #999", minHeight: 80, padding: 10 }}></div>
-      </div>
-
-      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 50 }}>
-        <Signature label="Reporting staff" />
-        <Signature label="DCS / Invigilator" />
-        <Signature label="Controller of Examinations" />
+      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 90 }}>
+        <div style={{ textAlign: "center", width: 220 }}>
+          <div style={{ borderTop: "1px solid #111", paddingTop: 6, fontSize: 13, fontWeight: 700 }}>Controller of Examinations</div>
+        </div>
       </div>
     </div>
   );
