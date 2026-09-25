@@ -360,7 +360,7 @@ function MalpracticeRegister() {
         }
       `}</style>
 
-      {printTarget && <PrintableCase report={printTarget} />}
+      {printTarget && (printTarget.__order ? <PrintableOrder report={printTarget} /> : <PrintableCase report={printTarget} />)}
 
       <div className="no-print">
       <div style={{ background: "#1F2B3E", color: "#EFEAE0", padding: "22px 32px", borderBottom: "5px double #A6813C" }}>
@@ -443,6 +443,7 @@ function MalpracticeRegister() {
                   filters={filters}
                   setFilter={setFilter}
                   onPrint={setPrintTarget}
+                  onPatch={patchReport}
                   onExport={exportToExcel}
                 />
               )}
@@ -1158,7 +1159,188 @@ function EnquiryCard({ r, onPatch, onPrint, onDirtyChange, onSaved }) {
   );
 }
 
-function Register({ reports, filters, setFilter, onPrint, onExport }) {
+// ---------------------------------------------------------------------------
+// Office Order (penalty order issued by the CoE)
+// ---------------------------------------------------------------------------
+function todayLocalISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function fmtDMY(iso) {
+  if (!iso) return "";
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : iso;
+}
+
+function ordinal(n) {
+  const x = parseInt(n, 10);
+  if (!x) return n || "";
+  const s = ["th", "st", "nd", "rd"], v = x % 100;
+  return x + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
+function componentLabel(c) {
+  return { Test1: "Test 1", Test2: "Test 2" }[c] || c || "";
+}
+
+function courseLabel(r) {
+  if (r.courseCode && r.course) return `${r.courseCode} – ${r.course}`;
+  return r.courseCode || r.course || "";
+}
+
+// Suggested order points, built from the penalty recorded at enquiry.
+function defaultOrderPoints(r) {
+  const pts = [];
+  const course = courseLabel(r);
+  if (r.penaltyDX) pts.push(`The student is awarded DX grade in the course ${course}.`);
+  if (r.fineAmount) pts.push(`A fine of Rs. ${r.fineAmount}/- is imposed on the student.`);
+  if (r.cancelReg) pts.push(`The registration of the student for the course ${course} is cancelled.`);
+  (r.penaltyComments || "").split("\n").map((l) => l.trim()).filter(Boolean).forEach((l) => pts.push(l));
+  return pts.join("\n");
+}
+
+function orderDraftFrom(r) {
+  return {
+    orderRefNo: r.orderRefNo || "",
+    orderDate: r.orderDate || todayLocalISO(),
+    enquiryMeetingDate: r.enquiryMeetingDate || "",
+    hodDept: r.hodDept || "",
+    orderPoints: r.orderPoints || defaultOrderPoints(r),
+  };
+}
+
+function OfficeOrderDialog({ r, onClose, onPatch, onPrint }) {
+  const [draft, setDraft] = useState(() => orderDraftFrom(r));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const set = (k, v) => { setError(""); setDraft((d) => ({ ...d, [k]: v })); };
+
+  async function saveAndPrint() {
+    if (!draft.orderPoints.trim()) { setError("Enter at least one order point."); return; }
+    setSaving(true);
+    const ok = await onPatch(r.id, draft);
+    setSaving(false);
+    if (!ok) { setError("Could not save — check your connection and try again."); return; }
+    onPrint({ ...r, ...draft, __order: true });
+    onClose();
+  }
+
+  return (
+    <div className="no-print" style={{ position: "fixed", inset: 0, background: "rgba(20,25,35,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", overflowY: "auto", zIndex: 50 }}>
+      <div style={{ background: "#FFFDF9", borderRadius: 6, width: "100%", maxWidth: 680, padding: "22px 26px", border: "1px solid #DCD3BD" }}>
+        <h3 className="serif" style={{ margin: "0 0 4px", fontSize: 18, color: "#1F2B3E" }}>Office order</h3>
+        <div className="mono" style={{ fontSize: 12, color: "#8A8478", marginBottom: 14 }}>{r.caseNo} · {r.studentName} ({r.usn})</div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 18px" }}>
+          <Field label={`Ref no. (NIE / AEC / ___ / ${r.academicYear})`}>
+            <input style={inputStyle} value={draft.orderRefNo} placeholder="e.g. 45" onChange={(e) => set("orderRefNo", e.target.value)} />
+          </Field>
+          <Field label="Order date">
+            <input type="date" style={inputStyle} value={draft.orderDate} onChange={(e) => set("orderDate", e.target.value)} />
+          </Field>
+          <Field label="Enquiry committee meeting date">
+            <input type="date" style={inputStyle} value={draft.enquiryMeetingDate} onChange={(e) => set("enquiryMeetingDate", e.target.value)} />
+          </Field>
+          <Field label="HoD, Dept of (copy to)">
+            <input style={inputStyle} value={draft.hodDept} placeholder="e.g. Computer Science & Engg." onChange={(e) => set("hodDept", e.target.value)} />
+          </Field>
+        </div>
+
+        <Field label="Order points — one per line (printed as a), b), c)…)">
+          <textarea
+            style={{ ...inputStyle, minHeight: 120, resize: "vertical", fontFamily: "Inter, sans-serif" }}
+            value={draft.orderPoints}
+            onChange={(e) => set("orderPoints", e.target.value)}
+          />
+        </Field>
+        <div style={{ fontSize: 12, color: "#8A8478", marginTop: -6, marginBottom: 12 }}>
+          Filled in from the penalty and penalty comments. Edit the wording as needed.{" "}
+          <button onClick={() => set("orderPoints", defaultOrderPoints(r))} style={{ background: "none", border: "none", color: "#2C4A6E", textDecoration: "underline", cursor: "pointer", fontSize: 12, padding: 0 }}>
+            Reset from penalty
+          </button>
+        </div>
+
+        {error && <div style={{ color: "#7A2E2E", fontSize: 13, marginBottom: 10 }}>{error}</div>}
+
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+          <button onClick={onClose} disabled={saving} style={{ background: "none", color: "#5B6472", border: "1px solid #C9BFA5", padding: "9px 18px", borderRadius: 4, fontSize: 13, cursor: "pointer" }}>
+            Cancel
+          </button>
+          <button onClick={saveAndPrint} disabled={saving} style={{ background: "#1F2B3E", color: "#EFEAE0", border: "none", padding: "9px 20px", borderRadius: 4, fontSize: 13, fontWeight: 600, cursor: "pointer", opacity: saving ? 0.6 : 1 }}>
+            {saving ? "Saving…" : "Save & print order"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PrintableOrder({ report: r }) {
+  const points = (r.orderPoints || "").split("\n").map((l) => l.trim()).filter(Boolean);
+  const mode = r.copyMode === "Other" ? (r.copyModeOther || "Other") : r.copyMode;
+  const blank = (v, w = 110) => v ? v : <span style={{ display: "inline-block", width: w, borderBottom: "1px solid #111" }}>&nbsp;</span>;
+  const copyTo = [
+    "Principal, for kind information.",
+    "Dean (AA) - for kind information.",
+    <span>HoD, Dept of {blank(r.hodDept, 120)}</span>,
+    "SDSC",
+    "Examination Section",
+  ];
+  if (r.fineAmount) copyTo.push(<strong>Accounts Section</strong>);
+
+  return (
+    <div className="print-sheet" style={{ color: "#000", fontFamily: "'Times New Roman', Times, serif", fontSize: "12pt", lineHeight: 1.5 }}>
+      <div style={{ textAlign: "right", marginBottom: 22 }}>
+        <div style={{ fontWeight: 700, textDecoration: "underline" }}>Office of the CoE</div>
+        <div>Academic &amp; Examination Cell</div>
+        <div>N.I.E., Mysuru</div>
+      </div>
+
+      <div style={{ display: "flex", justifyContent: "space-between" }}>
+        <div>Ref : NIE / AEC / {r.orderRefNo || "\u00A0\u00A0\u00A0\u00A0"} / {r.academicYear}</div>
+        <div>Dt : {fmtDMY(r.orderDate)}</div>
+      </div>
+
+      <div style={{ textAlign: "center", fontWeight: 700, textDecoration: "underline", margin: "4px 0 16px" }}>OFFICE ORDER</div>
+
+      <div style={{ fontWeight: 700, textDecoration: "underline", display: "inline" }}>Preamble</div>:
+      <p style={{ textAlign: "justify", margin: "10px 0 16px" }}>
+        {r.studentName} – {r.usn} appeared for the {componentLabel(r.component)} held on <strong>{fmtDMY(r.examDate)}</strong> for
+        the course <strong>{courseLabel(r)}</strong> of {ordinal(r.sem)} semester. The student was held for indulging in
+        malpractice activity ({mode}). The Malpractice Enquiry Committee meeting was held on {blank(fmtDMY(r.enquiryMeetingDate))}.
+        The penalty recommendations of the committee <strong style={{ textDecoration: "underline" }}>approved by Principal</strong> are as follows:
+      </p>
+
+      <div style={{ textAlign: "center", fontWeight: 700, textDecoration: "underline", letterSpacing: "0.3em", marginBottom: 12 }}>ORDER</div>
+
+      <div style={{ marginLeft: 36 }}>
+        {points.map((p, i) => (
+          <div key={i} style={{ display: "flex", marginBottom: 4, textAlign: "justify" }}>
+            <span style={{ width: 26, flexShrink: 0 }}>{String.fromCharCode(97 + i)})</span>
+            <span>{p}</span>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ textAlign: "right", fontWeight: 700, marginTop: 60, marginBottom: 24 }}>Controller of Examinations</div>
+
+      <div style={{ fontWeight: 700 }}>Copy to:</div>
+      <div style={{ marginLeft: 14, marginTop: 2 }}>
+        {copyTo.map((c, i) => (
+          <div key={i} style={{ display: "flex" }}>
+            <span style={{ width: 24, flexShrink: 0 }}>{i + 1})</span>
+            <span>{c}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Register({ reports, filters, setFilter, onPrint, onPatch, onExport }) {
+  const [orderFor, setOrderFor] = useState(null);
+  const orderCase = orderFor ? reports.find((x) => x.id === orderFor) : null;
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 12 }}>
@@ -1229,11 +1411,22 @@ function Register({ reports, filters, setFilter, onPrint, onExport }) {
                   >
                     Print case report
                   </button>
+                  {r.status === "Resolved" && (
+                    <button
+                      onClick={() => setOrderFor(r.id)}
+                      style={{ marginLeft: 8, background: "#1F2B3E", border: "1px solid #1F2B3E", color: "#EFEAE0", padding: "5px 12px", borderRadius: 4, fontSize: 12, cursor: "pointer" }}
+                    >
+                      {r.orderDate ? "Office order ✓" : "Office order"}
+                    </button>
+                  )}
                 </div>
               </div>
             );
           })}
         </div>
+      )}
+      {orderCase && (
+        <OfficeOrderDialog r={orderCase} onClose={() => setOrderFor(null)} onPatch={onPatch} onPrint={onPrint} />
       )}
     </div>
   );
