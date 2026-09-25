@@ -272,8 +272,10 @@ function MalpracticeRegister() {
       const res = await apiRequest(`/api/reports/${id}`, { method: "PATCH", token, body: patch });
       setReports((prev) => prev.map((r) => (r.id === id ? res.report : r)));
       setLoadError("");
+      return true;
     } catch (e) {
       setLoadError(e.message || "Could not save that change — check your connection and try again.");
+      return false;
     }
   }
 
@@ -499,7 +501,7 @@ function PrintableCase({ report: r }) {
             <Row label="DX Grade" value={r.penaltyDX ? "Yes" : "No"} />
             <Row label="Fine Amount" value={r.fineAmount ? `Rs. ${r.fineAmount}` : "—"} />
             <Row label="Cancel Registration" value={r.cancelReg ? "Yes" : "No"} />
-            <Row label="Comments" value={r.penaltyComments || "—"} />
+            <Row label="Penalty Comments" value={r.penaltyComments || "—"} />
           </tbody>
         </table>
       </div>
@@ -621,7 +623,7 @@ function DetailRow({ label, value }) {
   );
 }
 
-function CaseDetailPanel({ r }) {
+function CaseDetailPanel({ r, hidePenalty = false }) {
   return (
     <div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 28px" }}>
@@ -640,7 +642,7 @@ function CaseDetailPanel({ r }) {
         <DetailRow label="Mode of Copying" value={r.copyMode === "Other" ? `Other — ${r.copyModeOther || ""}` : r.copyMode} />
         <DetailRow label="Reported By" value={r.reporterName ? `${r.reporterName} (${r.reporterRole})` : ""} />
         <DetailRow label="Date Reported" value={r.dateReported} />
-        {(r.penaltyDX || r.fineAmount || r.cancelReg) && (
+        {!hidePenalty && (r.penaltyDX || r.fineAmount || r.cancelReg) && (
           <DetailRow
             label="Penalty"
             value={[
@@ -650,10 +652,10 @@ function CaseDetailPanel({ r }) {
             ].filter(Boolean).join(" · ") || null}
           />
         )}
-        {r.penaltyComments && (
+        {!hidePenalty && r.penaltyComments && (
           <DetailRow label="Penalty Comments" value={r.penaltyComments} />
         )}
-        {r.status === "Not Resolved" && r.notResolvedReason && (
+        {!hidePenalty && r.status === "Not Resolved" && r.notResolvedReason && (
           <DetailRow label="Reason Not Resolved" value={r.notResolvedReason} />
         )}
         {r.enteredBy && <DetailRow label="Entered By (system)" value={r.enteredBy} />}
@@ -913,14 +915,50 @@ function NewReport({ onSubmit }) {
   );
 }
 
+function enquiryDraftFrom(r) {
+  return {
+    penaltyDX: !!r.penaltyDX,
+    fineAmount: r.fineAmount || "",
+    cancelReg: !!r.cancelReg,
+    penaltyComments: r.penaltyComments || "",
+    status: r.status || "Reported",
+    notResolvedReason: r.notResolvedReason || "",
+  };
+}
+
 function Enquiry({ reports, onPatch, onPrint }) {
   const pending = reports.filter((r) => r.status === "Reported" || r.status === "Enquiry Pending");
   const [index, setIndex] = useState(0);
+  const [dirty, setDirty] = useState(false);
+  const [savedNote, setSavedNote] = useState("");
   const safeIndex = pending.length === 0 ? 0 : Math.min(index, pending.length - 1);
 
   useEffect(() => {
     if (index > pending.length - 1 && pending.length > 0) setIndex(pending.length - 1);
   }, [pending.length, index]);
+
+  function goTo(newIndex) {
+    if (dirty && !window.confirm("You have unsaved changes on this case. Leave without saving?")) return;
+    setDirty(false);
+    setSavedNote("");
+    setIndex(newIndex);
+  }
+
+  function handleSaved(caseNo, status) {
+    setDirty(false);
+    const leftList = status === "Resolved" || status === "Not Resolved";
+    setSavedNote(
+      leftList
+        ? `Enquiry for ${caseNo} saved as ${status}. It has moved to Case history.`
+        : `Enquiry for ${caseNo} saved.`
+    );
+    setTimeout(() => setSavedNote(""), 4000);
+  }
+
+  const navBtn = (disabled) => ({
+    background: "none", border: "1px solid #C9BFA5", color: disabled ? "#B9B2A0" : "#1F2B3E",
+    padding: "7px 14px", borderRadius: 4, fontSize: 12, cursor: disabled ? "not-allowed" : "pointer",
+  });
 
   return (
     <div>
@@ -928,112 +966,175 @@ function Enquiry({ reports, onPatch, onPrint }) {
         <h2 className="serif" style={{ fontSize: 19, margin: 0, color: "#1F2B3E" }}>Enquiry — pending cases</h2>
         {pending.length > 0 && (
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <button
-              onClick={() => setIndex((i) => Math.max(0, i - 1))}
-              disabled={safeIndex === 0}
-              style={{ background: "none", border: "1px solid #C9BFA5", color: safeIndex === 0 ? "#B9B2A0" : "#1F2B3E", padding: "7px 14px", borderRadius: 4, fontSize: 12, cursor: safeIndex === 0 ? "not-allowed" : "pointer" }}
-            >
+            <button onClick={() => goTo(Math.max(0, safeIndex - 1))} disabled={safeIndex === 0} style={navBtn(safeIndex === 0)}>
               ← Previous
             </button>
             <span className="mono" style={{ fontSize: 12, color: "#8A8478" }}>Case {safeIndex + 1} of {pending.length}</span>
-            <button
-              onClick={() => setIndex((i) => Math.min(pending.length - 1, i + 1))}
-              disabled={safeIndex === pending.length - 1}
-              style={{ background: "none", border: "1px solid #C9BFA5", color: safeIndex === pending.length - 1 ? "#B9B2A0" : "#1F2B3E", padding: "7px 14px", borderRadius: 4, fontSize: 12, cursor: safeIndex === pending.length - 1 ? "not-allowed" : "pointer" }}
-            >
+            <button onClick={() => goTo(Math.min(pending.length - 1, safeIndex + 1))} disabled={safeIndex === pending.length - 1} style={navBtn(safeIndex === pending.length - 1)}>
               Next →
             </button>
           </div>
         )}
       </div>
-      <p style={{ fontSize: 13, color: "#5B6472", marginBottom: 20 }}>Enter the enquiry outcome and penalty for this case, then set its final status. It moves to Case history once marked Resolved or Not Resolved.</p>
+      <p style={{ fontSize: 13, color: "#5B6472", marginBottom: 20 }}>
+        Enter the penalty, comments and enquiry status for this case, then press <strong>Save enquiry</strong>. Nothing is saved until you press Save. Cases marked Resolved or Not Resolved move to Case history.
+      </p>
+
+      {savedNote && (
+        <div style={{ background: "#E3ECD9", border: "1px solid #8AAE6F", color: "#3B5A2A", padding: "8px 14px", borderRadius: 4, fontSize: 13, marginBottom: 16 }}>
+          {savedNote}
+        </div>
+      )}
 
       {pending.length === 0 ? (
         <div style={{ textAlign: "center", padding: "50px 0", color: "#8A8478" }}>No cases currently awaiting enquiry.</div>
       ) : (
-        (() => {
-          const r = pending[safeIndex];
-          const sc = STATUS_COLOR[r.status];
-          return (
-            <div key={r.id} style={{ border: "1px solid #DCD3BD", borderRadius: 6, padding: "22px 26px", background: "#FFFDF9" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap", marginBottom: 4 }}>
-                <div className="mono" style={{ fontSize: 12, color: "#8A8478" }}>{r.caseNo}</div>
-                <span className="stamp" style={{ background: sc.bg, color: sc.text, borderColor: sc.border }}>{r.status}</span>
-              </div>
-
-              <div style={sectionHeadStyle}>Case details</div>
-              <CaseDetailPanel r={r} />
-
-              <div style={sectionHeadStyle}>Penalty</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0 20px", alignItems: "end" }}>
-                <Field label="DX grade">
-                  <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, cursor: "pointer", paddingTop: 6 }}>
-                    <input type="checkbox" checked={!!r.penaltyDX} onChange={(e) => onPatch(r.id, { penaltyDX: e.target.checked })} />
-                    Award DX grade
-                  </label>
-                </Field>
-                <Field label="Fine amount (Rs.)">
-                  <input type="number" min="0" style={inputStyle} value={r.fineAmount || ""} placeholder="e.g. 5000" onChange={(e) => onPatch(r.id, { fineAmount: e.target.value })} />
-                </Field>
-                <Field label="Cancel registration">
-                  <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, cursor: "pointer", paddingTop: 6 }}>
-                    <input type="checkbox" checked={!!r.cancelReg} onChange={(e) => onPatch(r.id, { cancelReg: e.target.checked })} />
-                    Cancel the registration
-                  </label>
-                </Field>
-              </div>
-
-              <div style={{ marginTop: 4 }}>
-                <Field label="Comments">
-                  <textarea
-                    style={{ ...inputStyle, minHeight: 70, resize: "vertical", fontFamily: "Inter, sans-serif" }}
-                    value={r.penaltyComments || ""}
-                    placeholder="Any additional remarks on the penalty or enquiry outcome"
-                    onChange={(e) => onPatch(r.id, { penaltyComments: e.target.value })}
-                  />
-                </Field>
-              </div>
-
-              <div style={{ marginTop: 14, display: "flex", alignItems: "flex-end", gap: 14, flexWrap: "wrap" }}>
-                <div>
-                  <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#5B6472", marginBottom: 5, textTransform: "uppercase" }}>Enquiry status</label>
-                  <select
-                    style={{ ...inputStyle, width: "auto" }}
-                    value={r.status}
-                    onChange={(e) => {
-                      const status = e.target.value;
-                      onPatch(r.id, { status, notResolvedReason: status === "Not Resolved" ? r.notResolvedReason : "" });
-                    }}
-                  >
-                    <option value="Reported">Reported</option>
-                    <option value="Enquiry Pending">Enquiry Pending</option>
-                    <option value="Resolved">Resolved</option>
-                    <option value="Not Resolved">Not Resolved</option>
-                  </select>
-                </div>
-                <button
-                  onClick={() => onPrint(r)}
-                  style={{ background: "none", border: "1px solid #C9BFA5", color: "#1F2B3E", padding: "9px 14px", borderRadius: 4, fontSize: 12, cursor: "pointer" }}
-                >
-                  Print case report
-                </button>
-              </div>
-
-              {r.status === "Not Resolved" && (
-                <div style={{ marginTop: 12 }}>
-                  <label style={{ fontSize: 12, color: "#7A2E2E", fontWeight: 600, display: "block", marginBottom: 4 }}>Reason not resolved:</label>
-                  <input
-                    style={{ ...inputStyle, borderColor: "#C08A87" }}
-                    value={r.notResolvedReason || ""}
-                    placeholder="e.g. Student did not appear for enquiry hearing"
-                    onChange={(e) => onPatch(r.id, { notResolvedReason: e.target.value })}
-                  />
-                </div>
-              )}
-            </div>
-          );
-        })()
+        <EnquiryCard
+          key={pending[safeIndex].id}
+          r={pending[safeIndex]}
+          onPatch={onPatch}
+          onPrint={onPrint}
+          onDirtyChange={setDirty}
+          onSaved={handleSaved}
+        />
       )}
+    </div>
+  );
+}
+
+function EnquiryCard({ r, onPatch, onPrint, onDirtyChange, onSaved }) {
+  const [draft, setDraft] = useState(() => enquiryDraftFrom(r));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const original = enquiryDraftFrom(r);
+  const dirty = Object.keys(draft).some((k) => draft[k] !== original[k]);
+
+  useEffect(() => { onDirtyChange(dirty); }, [dirty]);
+
+  // Warn before closing/refreshing the browser tab with unsaved changes.
+  useEffect(() => {
+    if (!dirty) return;
+    const handler = (e) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [dirty]);
+
+  function set(k, v) {
+    setError("");
+    setDraft((d) => ({ ...d, [k]: v }));
+  }
+
+  async function handleSave() {
+    if (draft.status === "Not Resolved" && !draft.notResolvedReason.trim()) {
+      setError('Enter the reason, since the status is "Not Resolved".');
+      return;
+    }
+    setSaving(true);
+    setError("");
+    const patch = {
+      ...draft,
+      penaltyComments: draft.penaltyComments.trim(),
+      notResolvedReason: draft.status === "Not Resolved" ? draft.notResolvedReason.trim() : "",
+    };
+    const ok = await onPatch(r.id, patch);
+    setSaving(false);
+    if (ok) {
+      onDirtyChange(false);
+      onSaved(r.caseNo, patch.status);
+    } else {
+      setError("Could not save — check your connection and try again. Your entries are still here.");
+    }
+  }
+
+  const sc = STATUS_COLOR[r.status];
+
+  return (
+    <div style={{ border: "1px solid #DCD3BD", borderRadius: 6, padding: "22px 26px", background: "#FFFDF9" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap", marginBottom: 4 }}>
+        <div className="mono" style={{ fontSize: 12, color: "#8A8478" }}>{r.caseNo}</div>
+        <span className="stamp" style={{ background: sc.bg, color: sc.text, borderColor: sc.border }}>{r.status}</span>
+      </div>
+
+      <div style={sectionHeadStyle}>Case details</div>
+      <CaseDetailPanel r={r} hidePenalty />
+
+      <div style={sectionHeadStyle}>Penalty</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0 20px", alignItems: "end" }}>
+        <Field label="DX grade">
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, cursor: "pointer", paddingTop: 6 }}>
+            <input type="checkbox" checked={draft.penaltyDX} onChange={(e) => set("penaltyDX", e.target.checked)} />
+            Award DX grade
+          </label>
+        </Field>
+        <Field label="Fine amount (Rs.)">
+          <input type="number" min="0" style={inputStyle} value={draft.fineAmount} placeholder="e.g. 5000" onChange={(e) => set("fineAmount", e.target.value)} />
+        </Field>
+        <Field label="Cancel registration">
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, cursor: "pointer", paddingTop: 6 }}>
+            <input type="checkbox" checked={draft.cancelReg} onChange={(e) => set("cancelReg", e.target.checked)} />
+            Cancel the registration
+          </label>
+        </Field>
+      </div>
+      <div style={{ marginTop: 4 }}>
+        <Field label="Penalty comments">
+          <textarea
+            style={{ ...inputStyle, minHeight: 70, resize: "vertical", fontFamily: "Inter, sans-serif" }}
+            value={draft.penaltyComments}
+            placeholder="Any additional remarks on the penalty or enquiry outcome"
+            onChange={(e) => set("penaltyComments", e.target.value)}
+          />
+        </Field>
+      </div>
+
+      <div style={{ marginTop: 6 }}>
+        <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#5B6472", marginBottom: 5, textTransform: "uppercase" }}>Enquiry status</label>
+        <select style={{ ...inputStyle, width: "auto" }} value={draft.status} onChange={(e) => set("status", e.target.value)}>
+          {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+      </div>
+
+      {draft.status === "Not Resolved" && (
+        <div style={{ marginTop: 12 }}>
+          <label style={{ fontSize: 12, color: "#7A2E2E", fontWeight: 600, display: "block", marginBottom: 4 }}>Reason not resolved (required):</label>
+          <input
+            style={{ ...inputStyle, borderColor: "#C08A87" }}
+            value={draft.notResolvedReason}
+            placeholder="e.g. Student did not appear for enquiry hearing"
+            onChange={(e) => set("notResolvedReason", e.target.value)}
+          />
+        </div>
+      )}
+
+      {error && <div style={{ color: "#7A2E2E", fontSize: 13, marginTop: 12 }}>{error}</div>}
+
+      <div style={{ marginTop: 18, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <button
+          onClick={handleSave}
+          disabled={saving || !dirty}
+          style={{
+            background: "#1F2B3E", color: "#EFEAE0", border: "none", padding: "11px 24px", borderRadius: 4,
+            fontSize: 14, fontWeight: 600, cursor: saving || !dirty ? "default" : "pointer", opacity: saving || !dirty ? 0.6 : 1,
+          }}
+        >
+          {saving ? "Saving…" : "Save enquiry"}
+        </button>
+        <button
+          onClick={() => { setDraft(enquiryDraftFrom(r)); setError(""); }}
+          disabled={saving || !dirty}
+          style={{ background: "none", color: "#5B6472", border: "1px solid #C9BFA5", padding: "11px 20px", borderRadius: 4, fontSize: 14, fontWeight: 600, cursor: saving || !dirty ? "default" : "pointer", opacity: !dirty ? 0.6 : 1 }}
+        >
+          Discard changes
+        </button>
+        <button
+          onClick={() => onPrint({ ...r, ...draft })}
+          style={{ background: "none", border: "1px solid #C9BFA5", color: "#1F2B3E", padding: "11px 16px", borderRadius: 4, fontSize: 13, cursor: "pointer" }}
+        >
+          Print case report
+        </button>
+        {dirty && !saving && <span style={{ fontSize: 12, color: "#A6813C" }}>Unsaved changes</span>}
+      </div>
     </div>
   );
 }
