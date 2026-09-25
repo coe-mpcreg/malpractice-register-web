@@ -351,8 +351,11 @@ function MalpracticeRegister() {
         }
         ::placeholder { color: #a39d8f; }
         .print-sheet { display: none; }
+        @page { size: A4; margin: 14mm 16mm; }
         @media print {
+          html, body { background: #fff !important; margin: 0 !important; }
           .no-print { display: none !important; }
+          .system-info { display: none !important; }
           .print-sheet { display: block !important; }
         }
       `}</style>
@@ -458,57 +461,78 @@ function MalpracticeRegister() {
 }
 
 function PrintableCase({ report: r }) {
+  const mode = r.copyMode === "Other" ? `Other — ${r.copyModeOther || ""}` : r.copyMode;
+  const course = r.course ? `${r.course}${r.courseCode ? " (" + r.courseCode + ")" : ""}` : r.courseCode;
+  // Pairs of [label, value] shown two per row to keep the report on one page.
+  const details = [
+    ["Case No.", r.caseNo], ["Date Reported", r.dateReported],
+    ["Academic Year", r.academicYear], ["Campus", r.campus],
+    ["Programme", r.programme], ["Semester Type", r.semType],
+    ["Component", r.component], ["Semester", r.sem],
+    ["Student Name", r.studentName], ["USN", r.usn],
+    ["Course", course], ["Room Number", r.roomNo],
+    ["Date of Exam", r.examDate], ["Time", r.examTime],
+    ["Mode of Copying", mode], ["Reported By", r.reporterName ? `${r.reporterName} (${r.reporterRole})` : ""],
+    ["Current Status", r.status], r.status === "Not Resolved" ? ["Reason (Not Resolved)", r.notResolvedReason] : null,
+  ];
+  const rows = [];
+  for (let i = 0; i < details.length; i += 2) rows.push([details[i], details[i + 1]]);
+
+  const labelCell = { padding: "3px 6px 3px 0", width: "18%", fontWeight: 700, verticalAlign: "top" };
+  const valueCell = { padding: "3px 12px 3px 0", width: "32%", verticalAlign: "top" };
+
   return (
-    <div className="print-sheet serif" style={{ padding: "40px 50px", color: "#111", fontSize: 13, lineHeight: 1.5 }}>
-      <div style={{ textAlign: "center", borderBottom: "3px double #111", paddingBottom: 14, marginBottom: 20 }}>
-        <div style={{ fontSize: 18, fontWeight: 700 }}>Office of the Controller of Examinations</div>
-        <div style={{ fontSize: 12, marginTop: 4 }}>Examination Malpractice — Incident Report</div>
+    <div className="print-sheet serif" style={{ color: "#111", fontSize: 12, lineHeight: 1.4 }}>
+      <div style={{ textAlign: "center", borderBottom: "3px double #111", paddingBottom: 10, marginBottom: 14 }}>
+        <div style={{ fontSize: 17, fontWeight: 700 }}>Office of the Controller of Examinations</div>
+        <div style={{ fontSize: 12, marginTop: 3 }}>Examination Malpractice — Incident Report</div>
       </div>
 
-      <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 18 }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 14 }}>
         <tbody>
-          <Row label="Case No." value={r.caseNo} />
-          <Row label="Date Reported" value={r.dateReported} />
-          <Row label="Academic Year" value={r.academicYear} />
-          <Row label="Campus" value={r.campus} />
-          <Row label="Programme" value={r.programme} />
-          <Row label="Semester Type" value={r.semType} />
-          <Row label="Component" value={r.component} />
-          <Row label="Student Name" value={r.studentName} />
-          <Row label="USN" value={r.usn} />
-          <Row label="Semester" value={r.sem} />
-          <Row label="Course" value={r.course} />
-          <Row label="Course Code" value={r.courseCode} />
-          <Row label="Date of Exam" value={r.examDate} />
-          <Row label="Time" value={r.examTime} />
-          <Row label="Room Number" value={r.roomNo} />
-          <Row label="Mode of Copying" value={r.copyMode === "Other" ? `Other — ${r.copyModeOther || ""}` : r.copyMode} />
-          <Row label="Reported By" value={`${r.reporterName} (${r.reporterRole})`} />
-          <Row label="Current Status" value={r.status} />
-          {r.status === "Not Resolved" && <Row label="Reason (Not Resolved)" value={r.notResolvedReason || "—"} />}
+          {rows.map(([a, b], i) => (
+            <tr key={i}>
+              <td style={labelCell}>{a[0]}</td>
+              <td style={valueCell}>{a[1] || "—"}</td>
+              <td style={labelCell}>{b ? b[0] : ""}</td>
+              <td style={valueCell}>{b ? b[1] || "—" : ""}</td>
+            </tr>
+          ))}
         </tbody>
       </table>
 
-      <div style={{ marginBottom: 18 }}>
-        <div style={{ fontWeight: 700, marginBottom: 6 }}>Description of incident</div>
-        <div style={{ border: "1px solid #999", minHeight: 60, padding: 10 }}>{r.description || "—"}</div>
+      <div style={{ marginBottom: 14, pageBreakInside: "avoid" }}>
+        <div style={{ fontWeight: 700, marginBottom: 4 }}>Description of incident</div>
+        <div style={{ border: "1px solid #999", minHeight: 40, padding: 8, whiteSpace: "pre-wrap" }}>{r.description || "—"}</div>
       </div>
 
-      <div style={{ marginBottom: 18 }}>
-        <div style={{ fontWeight: 700, marginBottom: 6 }}>Penalty imposed</div>
+      <div style={{ marginBottom: 14, pageBreakInside: "avoid" }}>
+        <div style={{ fontWeight: 700, marginBottom: 4 }}>Penalty imposed</div>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <tbody>
-            <Row label="DX Grade" value={r.penaltyDX ? "Yes" : "No"} />
-            <Row label="Fine Amount" value={r.fineAmount ? `Rs. ${r.fineAmount}` : "—"} />
-            <Row label="Cancel Registration" value={r.cancelReg ? "Yes" : "No"} />
-            <Row label="Penalty Comments" value={r.penaltyComments || "—"} />
+            <tr>
+              <td style={labelCell}>DX Grade</td>
+              <td style={valueCell}>{r.penaltyDX ? "Yes" : "No"}</td>
+              <td style={labelCell}>Fine Amount</td>
+              <td style={valueCell}>{r.fineAmount ? `Rs. ${r.fineAmount}` : "—"}</td>
+            </tr>
+            <tr>
+              <td style={labelCell}>Cancel Registration</td>
+              <td style={valueCell}>{r.cancelReg ? "Yes" : "No"}</td>
+              <td style={labelCell}></td>
+              <td style={valueCell}></td>
+            </tr>
+            <tr>
+              <td style={labelCell}>Penalty Comments</td>
+              <td colSpan={3} style={{ padding: "3px 0", verticalAlign: "top", whiteSpace: "pre-wrap" }}>{r.penaltyComments || "—"}</td>
+            </tr>
           </tbody>
         </table>
       </div>
 
-      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 90 }}>
+      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 60, pageBreakInside: "avoid", breakInside: "avoid" }}>
         <div style={{ textAlign: "center", width: 220 }}>
-          <div style={{ borderTop: "1px solid #111", paddingTop: 6, fontSize: 13, fontWeight: 700 }}>Controller of Examinations</div>
+          <div style={{ borderTop: "1px solid #111", paddingTop: 5, fontSize: 13, fontWeight: 700 }}>Controller of Examinations</div>
         </div>
       </div>
     </div>
@@ -609,9 +633,9 @@ function Dashboard({ stats }) {
   );
 }
 
-function DetailRow({ label, value }) {
+function DetailRow({ label, value, className }) {
   return (
-    <div style={{ display: "flex", gap: 10, fontSize: 13, padding: "5px 0", borderBottom: "1px dashed #E9E2CF" }}>
+    <div className={className} style={{ display: "flex", gap: 10, fontSize: 13, padding: "5px 0", borderBottom: "1px dashed #E9E2CF" }}>
       <span style={{ fontWeight: 700, color: "#1F2B3E", minWidth: 150, flexShrink: 0 }}>{label}:</span>
       <span style={{ color: "#3B3A36" }}>{value || "—"}</span>
     </div>
@@ -653,8 +677,8 @@ function CaseDetailPanel({ r, hidePenalty = false }) {
         {!hidePenalty && r.status === "Not Resolved" && r.notResolvedReason && (
           <DetailRow label="Reason Not Resolved" value={r.notResolvedReason} />
         )}
-        {r.enteredBy && <DetailRow label="Entered By (system)" value={r.enteredBy} />}
-        {r.lastEditedBy && <DetailRow label="Last Edited By (system)" value={r.lastEditedBy} />}
+        {r.enteredBy && <DetailRow className="system-info" label="Entered By (system)" value={r.enteredBy} />}
+        {r.lastEditedBy && <DetailRow className="system-info" label="Last Edited By (system)" value={r.lastEditedBy} />}
       </div>
       {r.description && (
         <div style={{ marginTop: 14 }}>
